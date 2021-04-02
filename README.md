@@ -4,6 +4,8 @@ Simple command line utility to dump [Neo N3](https://neo.org/blog/details/4225?l
 
 ## Install
 
+> Note, this tool has not been uploaded to nuget.org yet. In the meantime, you must clone and build locally
+
 ``` shell
 $ dotnet tool install -g DevHawk.DumpNef
 ```
