@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <AssemblyName>dumpnef</AssemblyName>
+    <Authors>Harry Pierson</Authors>
+    <Company>Harry Pierson</Company>
+    <Copyright>2021 Harry Pierson</Copyright>
+    <LangVersion>9</LangVersion>
+    <Nullable>enable</Nullable>
+    <OutputType>Exe</OutputType>
+    <PackageId>DevHawk.DumpNef</PackageId>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/neo-project/neo-express</PackageProjectUrl>
+    <PackageTags>Neo;Blockchain;Smart Contract</PackageTags>
+    <PackAsTool>true</PackAsTool>
+    <RepositoryType>git</RepositoryType>
+    <RepositoryUrl>https://github.com/neo-project/neo-express.git</RepositoryUrl>
+    <RootNamespace>DevHawk.DumpNef</RootNamespace>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <TargetFramework>net5.0</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="McMaster.Extensions.CommandLineUtils" Version="3.1.0" />
+    <PackageReference Include="Neo" Version="3.0.0-rc1" />
+    <PackageReference Include="Spectre.Console" Version="0.38.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.SourceLink.GitHub" Version="1.0.0" PrivateAssets="All"/>
+  </ItemGroup>
+  
+</Project>
