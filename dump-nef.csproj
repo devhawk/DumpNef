@@ -10,11 +10,11 @@
     <OutputType>Exe</OutputType>
     <PackageId>DevHawk.DumpNef</PackageId>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
-    <PackageProjectUrl>https://github.com/neo-project/neo-express</PackageProjectUrl>
+    <PackageProjectUrl>https://github.com/devhawk/DumpNef</PackageProjectUrl>
     <PackageTags>Neo;Blockchain;Smart Contract</PackageTags>
     <PackAsTool>true</PackAsTool>
     <RepositoryType>git</RepositoryType>
-    <RepositoryUrl>https://github.com/neo-project/neo-express.git</RepositoryUrl>
+    <RepositoryUrl>https://github.com/devhawk/DumpNef.git</RepositoryUrl>
     <RootNamespace>DevHawk.DumpNef</RootNamespace>
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
     <TargetFramework>net5.0</TargetFramework>
@@ -29,5 +29,5 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.SourceLink.GitHub" Version="1.0.0" PrivateAssets="All"/>
   </ItemGroup>
-  
+
 </Project>
