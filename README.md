@@ -10,7 +10,7 @@ Simple command line utility to dump [Neo N3](https://neo.org/blog/details/4225?l
 $ dotnet tool install -g DevHawk.DumpNef
 ```
 
-## example output
+## Example Output
 
 ```
 $ dumpnef registrar.nef
