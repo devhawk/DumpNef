@@ -29,3 +29,12 @@ $ dumpnef registrar.nef
 017 LDLOC1
 ... additional lines ommitted
 ```
+
+By default, dumpnef color codes the Neo VM instructions. This can be disabled with the `--disable-colors` option.
+
+### Colored Output:
+![image](https://user-images.githubusercontent.com/8965/113462318-269be480-93d5-11eb-889a-8a38cce54beb.png)
+
+### Monochrome Output:
+![image](https://user-images.githubusercontent.com/8965/113462389-737fbb00-93d5-11eb-8528-b29746012c04.png)
+
