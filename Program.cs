@@ -49,42 +49,39 @@ namespace DevHawk.DumpNef
                 }
                 else
                 {
-                    Dictionary<int, (string path, string fileName, string[] lines)> documentMap = new();
-                    for (int i = 0; i < debugInfo.Documents.Count; i++)
-                    {
-                        var path = debugInfo.Documents[i];
-                        documentMap.Add(i, (path, Path.GetFileName(path), File.ReadAllLines(path)));
-                    }
-
                     var documents = debugInfo.Documents
-                        
-                        .Select(d => System.IO.File.ReadAllLines(d))
+                        .Select(path => (fileName: Path.GetFileName(path), lines: File.ReadAllLines(path)))
                         .ToArray();
 
-                    foreach (var m in debugInfo.Methods.OrderBy(m => m.Range.Start))
+                    foreach (var method in debugInfo.Methods.OrderBy(m => m.Range.Start))
                     {
                         WriteNewLine(ref start);
-                        using (var k = SetForegroundColor(ConsoleColor.Green))
+                        using (var _ = SetConsoleColor(ConsoleColor.Magenta))
                         {
-                            Console.Write($"# Start Method {m.Namespace}.{m.Name}");
+                            Console.Write($"# Method Start {method.Namespace}.{method.Name}");
                         }
 
                         var methodInstructions = instructions
-                            .SkipWhile(t => t.address < m.Range.Start)
-                            .TakeWhile(t => t.address <= m.Range.End);
+                            .SkipWhile(t => t.address < method.Range.Start)
+                            .TakeWhile(t => t.address <= method.Range.End);
 
-                        var sequencePoints = m.SequencePoints.ToDictionary(sp => sp.Address);
+                        var sequencePoints = method.SequencePoints.ToDictionary(sp => sp.Address);
                         foreach (var t in methodInstructions)
                         {
                             if (sequencePoints.TryGetValue(t.address, out var sp)
-                                && documentMap.TryGetValue(sp.Document, out var doc))
+                                && sp.Document < documents.Length)
                             {
-                                var line = doc.lines[sp.Start.line - 1];
-
-                                WriteNewLine(ref start);
-                                using (var k = SetForegroundColor(ConsoleColor.Cyan))
+                                var doc = documents[sp.Document];
+                                var line = doc.lines[sp.Start.line - 1].Substring(sp.Start.column - 1);
+                                if (sp.Start.line == sp.End.line)
                                 {
-                                    Console.Write($"# {doc.fileName} line {sp.Start.line}: \"{line.Trim()}\"");
+                                    line = line.Substring(0, sp.End.column - sp.Start.column);
+                                }
+                                
+                                WriteNewLine(ref start);
+                                using (var _ = SetConsoleColor(ConsoleColor.Cyan))
+                                {
+                                    Console.Write($"# Code {doc.fileName} line {sp.Start.line}: \"{line}\"");
                                 }
                             }
 
@@ -93,9 +90,9 @@ namespace DevHawk.DumpNef
                         }
 
                         WriteNewLine(ref start);
-                        using (var k = SetForegroundColor(ConsoleColor.Green))
+                        using (var _ = SetConsoleColor(ConsoleColor.Magenta))
                         {
-                            Console.Write($"# End Method {m.Namespace}.{m.Name}");
+                            Console.Write($"# Method End {method.Namespace}.{method.Name}");
                         }
                     }
                 }
@@ -106,6 +103,11 @@ namespace DevHawk.DumpNef
             {
                 await console.Error.WriteLineAsync(ex.Message);
                 return 1;
+            }
+
+            static void WriteNewLine(ref bool start)
+            {
+                if (start) start = false; else Console.WriteLine();
             }
         }
 
@@ -134,19 +136,14 @@ namespace DevHawk.DumpNef
             return Neo.IO.Helper.ReadSerializable<Neo.SmartContract.NefFile>(reader);
         }
 
-        static void WriteNewLine(ref bool start)
-        {
-            if (start) start = false; else Console.WriteLine();
-        }
-
         void WriteInstruction(int address, Instruction instruction, string padString)
         {
-            using (var k = SetForegroundColor(ConsoleColor.Yellow))
+            using (var _ = SetConsoleColor(ConsoleColor.Yellow))
             {
                 Console.Write($"{address.ToString(padString)}");
             }
 
-            using (var k = SetForegroundColor(ConsoleColor.Blue))
+            using (var _ = SetConsoleColor(ConsoleColor.Blue))
             {
                 Console.Write($" {instruction.OpCode}");
             }
@@ -159,7 +156,7 @@ namespace DevHawk.DumpNef
             var comment = GetComment(instruction, address);
             if (comment.Length > 0)
             {
-                using (var k = SetForegroundColor(ConsoleColor.Green))
+                using (var _ = SetConsoleColor(ConsoleColor.Green))
                 {
                     Console.Write($" # {comment}");
                 }
@@ -266,31 +263,36 @@ namespace DevHawk.DumpNef
             return 10;
         }
 
-        IDisposable SetForegroundColor(ConsoleColor foregroundColor)
+        IDisposable SetConsoleColor(ConsoleColor foregroundColor, ConsoleColor? backgroundColor = null)
         {
             if (DisableColors) return Nito.Disposables.NoopDisposable.Instance;
-            return Konsole.Color(foregroundColor);
+            return new ConsoleColorManager(foregroundColor, backgroundColor);
         }
 
-        class Konsole : IDisposable
+        class ConsoleColorManager : IDisposable
         {
-            ConsoleColor originalForegroundColor;
+            readonly ConsoleColor originalForegroundColor;
+            readonly ConsoleColor? originalBackgroundColor;
 
-            public static IDisposable Color(ConsoleColor foregroundColor)
+            public ConsoleColorManager(ConsoleColor foregroundColor, ConsoleColor? backgroundColor = null)
             {
-                var k = new Konsole()
-                {
-                    originalForegroundColor = Console.ForegroundColor
-                };
+                originalForegroundColor = Console.ForegroundColor;
+                originalBackgroundColor = backgroundColor.HasValue ? Console.BackgroundColor : null;
 
                 Console.ForegroundColor = foregroundColor;
-
-                return k;
+                if (backgroundColor.HasValue)
+                {
+                    Console.BackgroundColor = backgroundColor.Value;
+                }
             }
 
             public void Dispose()
             {
                 Console.ForegroundColor = originalForegroundColor;
+                if (originalBackgroundColor.HasValue)
+                {
+                    Console.BackgroundColor = originalBackgroundColor.Value;
+                }
             }
         }
     }
