@@ -9,7 +9,7 @@
             "type": "coreclr",
             "request": "launch",
             "preLaunchTask": "build",
-            "program": "${workspaceFolder}/bin/Debug/net5.0/dump-nef.dll",
+            "program": "${workspaceFolder}/bin/Debug/net5.0/dumpnef.dll",
             "args": [],
             "cwd": "${workspaceFolder}",
             "console": "internalConsole",
