@@ -2,11 +2,11 @@
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.ComponentModel.DataAnnotations;
+using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using McMaster.Extensions.CommandLineUtils;
 using Neo.VM;
-using AnsiConsole = Spectre.Console.AnsiConsole;
 
 namespace DevHawk.DumpNef
 {
@@ -44,29 +44,56 @@ namespace DevHawk.DumpNef
                     foreach (var t in EnumerateInstructions(nef.Script))
                     {
                         WriteNewLine(ref start);
-                        WriteInstruction(t.address, t.instruction, padString, DisableColors);
+                        WriteInstruction(t.address, t.instruction, padString);
                     }
                 }
                 else
                 {
-                    foreach (var m in debugInfo.Methods.OrderBy(m => m.Range.Start))
+                    var documents = debugInfo.Documents
+                        .Select(path => (fileName: Path.GetFileName(path), lines: File.ReadAllLines(path)))
+                        .ToArray();
+
+                    foreach (var method in debugInfo.Methods.OrderBy(m => m.Range.Start))
                     {
                         WriteNewLine(ref start);
-                        if (DisableColors) Console.Write($"# Start Method {m.Namespace}.{m.Name}");
-                        else AnsiConsole.Markup($"[green]# Start Method {m.Namespace}.{m.Name}[/]");
+                        using (var _ = SetConsoleColor(ConsoleColor.Magenta))
+                        {
+                            Console.Write($"# Method Start {method.Namespace}.{method.Name}");
+                        }
 
                         var methodInstructions = instructions
-                            .SkipWhile(t => t.address < m.Range.Start)
-                            .TakeWhile(t => t.address <= m.Range.End);
+                            .SkipWhile(t => t.address < method.Range.Start)
+                            .TakeWhile(t => t.address <= method.Range.End);
+
+                        var sequencePoints = method.SequencePoints.ToDictionary(sp => sp.Address);
                         foreach (var t in methodInstructions)
                         {
+                            if (sequencePoints.TryGetValue(t.address, out var sp)
+                                && sp.Document < documents.Length)
+                            {
+                                var doc = documents[sp.Document];
+                                var line = doc.lines[sp.Start.line - 1].Substring(sp.Start.column - 1);
+                                if (sp.Start.line == sp.End.line)
+                                {
+                                    line = line.Substring(0, sp.End.column - sp.Start.column);
+                                }
+                                
+                                WriteNewLine(ref start);
+                                using (var _ = SetConsoleColor(ConsoleColor.Cyan))
+                                {
+                                    Console.Write($"# Code {doc.fileName} line {sp.Start.line}: \"{line}\"");
+                                }
+                            }
+
                             WriteNewLine(ref start);
-                            WriteInstruction(t.address, t.instruction, padString, DisableColors);
+                            WriteInstruction(t.address, t.instruction, padString);
                         }
 
                         WriteNewLine(ref start);
-                        if (DisableColors) Console.Write($"# End Method {m.Namespace}.{m.Name}");
-                        else AnsiConsole.Markup($"[green]# End Method {m.Namespace}.{m.Name}[/]");
+                        using (var _ = SetConsoleColor(ConsoleColor.Magenta))
+                        {
+                            Console.Write($"# Method End {method.Namespace}.{method.Name}");
+                        }
                     }
                 }
 
@@ -76,6 +103,11 @@ namespace DevHawk.DumpNef
             {
                 await console.Error.WriteLineAsync(ex.Message);
                 return 1;
+            }
+
+            static void WriteNewLine(ref bool start)
+            {
+                if (start) start = false; else Console.WriteLine();
             }
         }
 
@@ -104,26 +136,30 @@ namespace DevHawk.DumpNef
             return Neo.IO.Helper.ReadSerializable<Neo.SmartContract.NefFile>(reader);
         }
 
-        static void WriteNewLine(ref bool start)
+        void WriteInstruction(int address, Instruction instruction, string padString)
         {
-            if (start) start = false; else Console.WriteLine();
-        }
+            using (var _ = SetConsoleColor(ConsoleColor.Yellow))
+            {
+                Console.Write($"{address.ToString(padString)}");
+            }
 
-        static void WriteInstruction(int address, Instruction instruction, string padString, bool disableColors)
-        {
-            if (disableColors) Console.Write($"{address.ToString(padString)} {instruction.OpCode}");
-            else AnsiConsole.Markup($"[yellow]{address.ToString(padString)}[/] [blue]{instruction.OpCode}[/]");
+            using (var _ = SetConsoleColor(ConsoleColor.Blue))
+            {
+                Console.Write($" {instruction.OpCode}");
+            }
 
             if (!instruction.Operand.IsEmpty)
             {
-                if (disableColors) Console.Write($" {GetOperandString(instruction)}");
-                else AnsiConsole.Markup($" {GetOperandString(instruction)}");
+                Console.Write($" {GetOperandString(instruction)}");
             }
+
             var comment = GetComment(instruction, address);
             if (comment.Length > 0)
             {
-                if (disableColors) Console.Write($" # {comment}");
-                else AnsiConsole.Markup($" [green]# {comment}[/]");
+                using (var _ = SetConsoleColor(ConsoleColor.Green))
+                {
+                    Console.Write($" # {comment}");
+                }
             }
         }
 
@@ -225,6 +261,39 @@ namespace DevHawk.DumpNef
             if (n < 100000000) return 8;
             if (n < 1000000000) return 9;
             return 10;
+        }
+
+        IDisposable SetConsoleColor(ConsoleColor foregroundColor, ConsoleColor? backgroundColor = null)
+        {
+            if (DisableColors) return Nito.Disposables.NoopDisposable.Instance;
+            return new ConsoleColorManager(foregroundColor, backgroundColor);
+        }
+
+        class ConsoleColorManager : IDisposable
+        {
+            readonly ConsoleColor originalForegroundColor;
+            readonly ConsoleColor? originalBackgroundColor;
+
+            public ConsoleColorManager(ConsoleColor foregroundColor, ConsoleColor? backgroundColor = null)
+            {
+                originalForegroundColor = Console.ForegroundColor;
+                originalBackgroundColor = backgroundColor.HasValue ? Console.BackgroundColor : null;
+
+                Console.ForegroundColor = foregroundColor;
+                if (backgroundColor.HasValue)
+                {
+                    Console.BackgroundColor = backgroundColor.Value;
+                }
+            }
+
+            public void Dispose()
+            {
+                Console.ForegroundColor = originalForegroundColor;
+                if (originalBackgroundColor.HasValue)
+                {
+                    Console.BackgroundColor = originalBackgroundColor.Value;
+                }
+            }
         }
     }
 }

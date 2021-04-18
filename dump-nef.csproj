@@ -23,7 +23,7 @@
   <ItemGroup>
     <PackageReference Include="McMaster.Extensions.CommandLineUtils" Version="3.1.0" />
     <PackageReference Include="Neo" Version="3.0.0-rc1" />
-    <PackageReference Include="Spectre.Console" Version="0.38.0" />
+    <PackageReference Include="Nito.Disposables" Version="2.2.0" />
   </ItemGroup>
 
   <ItemGroup>
