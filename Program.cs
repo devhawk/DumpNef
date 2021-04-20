@@ -6,6 +6,8 @@ using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using McMaster.Extensions.CommandLineUtils;
+using Neo.BlockchainToolkit;
+using Neo.BlockchainToolkit.Models;
 using Neo.VM;
 
 namespace DevHawk.DumpNef
@@ -32,19 +34,20 @@ namespace DevHawk.DumpNef
             try
             {
                 var nef = LoadNefFile(NefFile);
-                var debugInfo = await DebugInfoParser.LoadAsync(NefFile, null);
+                var script = (Neo.VM.Script)nef.Script;
+                var debugInfo = (await DebugInfo.LoadAsync(NefFile, null))
+                    .Match<DebugInfo?>(di => di, _ => null);
 
-                var instructions = EnumerateInstructions(nef.Script).ToList();
-                var digitCount = DigitCount(instructions.Last().address);
-                var padString = new string('0', digitCount);
+                var instructions = script.EnumerateInstructions().ToList();
+                var padString = script.GetInstructionAddressPadding();
 
                 var start = true;
                 if (debugInfo == null)
                 {
-                    foreach (var t in EnumerateInstructions(nef.Script))
+                    for (int i = 0; i < instructions.Count; i++)
                     {
                         WriteNewLine(ref start);
-                        WriteInstruction(t.address, t.instruction, padString);
+                        WriteInstruction(instructions[i].address, instructions[i].instruction, padString);
                     }
                 }
                 else
@@ -111,24 +114,6 @@ namespace DevHawk.DumpNef
             }
         }
 
-        static IEnumerable<(int address, Instruction instruction)> EnumerateInstructions(Script script)
-        {
-            var address = 0;
-            var opcode = OpCode.PUSH0;
-            while (address < script.Length)
-            {
-                var instruction = script.GetInstruction(address);
-                opcode = instruction.OpCode;
-                yield return (address, instruction);
-                address += instruction.Size;
-            }
-
-            if (opcode != OpCode.RET)
-            {
-                yield return (address, Instruction.RET);
-            }
-        }
-
         static Neo.SmartContract.NefFile LoadNefFile(string path)
         {
             using var stream = System.IO.File.OpenRead(path);
@@ -150,10 +135,10 @@ namespace DevHawk.DumpNef
 
             if (!instruction.Operand.IsEmpty)
             {
-                Console.Write($" {GetOperandString(instruction)}");
+                Console.Write($" {instruction.GetOperandString()}");
             }
 
-            var comment = GetComment(instruction, address);
+            var comment = instruction.GetComment(address);
             if (comment.Length > 0)
             {
                 using (var _ = SetConsoleColor(ConsoleColor.Green))
@@ -161,106 +146,6 @@ namespace DevHawk.DumpNef
                     Console.Write($" # {comment}");
                 }
             }
-        }
-
-        static string GetOperandString(Instruction instruction)
-        {
-            return string.Create<ReadOnlyMemory<byte>>(instruction.Operand.Length * 3 - 1,
-                instruction.Operand, (span, memory) =>
-                {
-                    var first = memory.Span[0];
-                    span[0] = GetHexValue(first / 16);
-                    span[1] = GetHexValue(first % 16);
-
-                    var index = 1;
-                    for (var i = 2; i < span.Length; i += 3)
-                    {
-                        var b = memory.Span[index++];
-                        span[i] = '-';
-                        span[i + 1] = GetHexValue(b / 16);
-                        span[i + 2] = GetHexValue(b % 16);
-                    }
-                });
-
-            static char GetHexValue(int i) => (i < 10) ? (char)(i + '0') : (char)(i - 10 + 'A');
-        }
-
-        static readonly IReadOnlyDictionary<uint, string> sysCallNames =
-            Neo.SmartContract.ApplicationEngine.Services
-                .ToImmutableDictionary(kvp => kvp.Value.Hash, kvp => kvp.Value.Name);
-
-        static string GetComment(Instruction instruction, int ip)
-        {
-            switch (instruction.OpCode)
-            {
-                case OpCode.PUSHINT8:
-                case OpCode.PUSHINT16:
-                case OpCode.PUSHINT32:
-                case OpCode.PUSHINT64:
-                case OpCode.PUSHINT128:
-                case OpCode.PUSHINT256:
-                    return $"{new System.Numerics.BigInteger(instruction.Operand.Span)}";
-                case OpCode.PUSHM1:
-                    return $"{(int)instruction.OpCode - (int)OpCode.PUSH0}";
-                case OpCode.PUSHDATA1:
-                case OpCode.PUSHDATA2:
-                case OpCode.PUSHDATA4:
-                    {
-                        var text = System.Text.Encoding.UTF8.GetString(instruction.Operand.Span)
-                            .Replace("\r", "\"\\r\"").Replace("\n", "\"\\n\"");
-                        if (instruction.Operand.Length == 20)
-                        {
-                            return $"as script hash: {new Neo.UInt160(instruction.Operand.Span)}, as text: \"{text}\"";
-                        }
-                        return $"as text: \"{text}\"";
-                    }
-                case OpCode.SYSCALL:
-                    return sysCallNames.TryGetValue(instruction.TokenU32, out var name)
-                        ? name
-                        : $"Unknown SysCall {instruction.TokenU32}";
-                case OpCode.INITSLOT:
-                    return $"{instruction.TokenU8} local variables, {instruction.TokenU8_1} arguments";
-                case OpCode.JMP_L:
-                case OpCode.JMPEQ_L:
-                case OpCode.JMPGE_L:
-                case OpCode.JMPGT_L:
-                case OpCode.JMPIF_L:
-                case OpCode.JMPIFNOT_L:
-                case OpCode.JMPLE_L:
-                case OpCode.JMPLT_L:
-                case OpCode.JMPNE_L:
-                case OpCode.CALL_L:
-                    return OffsetComment(instruction.TokenI32);
-                case OpCode.JMP:
-                case OpCode.JMPEQ:
-                case OpCode.JMPGE:
-                case OpCode.JMPGT:
-                case OpCode.JMPIF:
-                case OpCode.JMPIFNOT:
-                case OpCode.JMPLE:
-                case OpCode.JMPLT:
-                case OpCode.JMPNE:
-                case OpCode.CALL:
-                    return OffsetComment(instruction.TokenI8);
-                default:
-                    return string.Empty;
-            }
-
-            string OffsetComment(int offset) => $"pos: {ip + offset}, offset: {offset}";
-        }
-
-        static int DigitCount(int n)
-        {
-            if (n < 10) return 1;
-            if (n < 100) return 2;
-            if (n < 1000) return 3;
-            if (n < 10000) return 4;
-            if (n < 100000) return 5;
-            if (n < 1000000) return 6;
-            if (n < 10000000) return 7;
-            if (n < 100000000) return 8;
-            if (n < 1000000000) return 9;
-            return 10;
         }
 
         IDisposable SetConsoleColor(ConsoleColor foregroundColor, ConsoleColor? backgroundColor = null)
