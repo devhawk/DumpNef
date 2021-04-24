@@ -1,6 +1,4 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Collections.Immutable;
 using System.ComponentModel.DataAnnotations;
 using System.IO;
 using System.Linq;
@@ -58,44 +56,47 @@ namespace DevHawk.DumpNef
 
                     foreach (var method in debugInfo.Methods.OrderBy(m => m.Range.Start))
                     {
-                        WriteNewLine(ref start);
-                        using (var _ = SetConsoleColor(ConsoleColor.Magenta))
+                        var originalForegroundColor = Console.ForegroundColor;
+                        try
                         {
+                            Console.ForegroundColor = ConsoleColor.Magenta;
+                            WriteNewLine(ref start);
                             Console.Write($"# Method Start {method.Namespace}.{method.Name}");
-                        }
 
-                        var methodInstructions = instructions
-                            .SkipWhile(t => t.address < method.Range.Start)
-                            .TakeWhile(t => t.address <= method.Range.End);
+                            var methodInstructions = instructions
+                                .SkipWhile(t => t.address < method.Range.Start)
+                                .TakeWhile(t => t.address <= method.Range.End);
 
-                        var sequencePoints = method.SequencePoints.ToDictionary(sp => sp.Address);
-                        foreach (var t in methodInstructions)
-                        {
-                            if (sequencePoints.TryGetValue(t.address, out var sp)
-                                && sp.Document < documents.Length)
+                            var sequencePoints = method.SequencePoints.ToDictionary(sp => sp.Address);
+                            foreach (var t in methodInstructions)
                             {
-                                var doc = documents[sp.Document];
-                                var line = doc.lines[sp.Start.line - 1].Substring(sp.Start.column - 1);
-                                if (sp.Start.line == sp.End.line)
+                                if (sequencePoints.TryGetValue(t.address, out var sp)
+                                    && sp.Document < documents.Length)
                                 {
-                                    line = line.Substring(0, sp.End.column - sp.Start.column);
-                                }
-                                
-                                WriteNewLine(ref start);
-                                using (var _ = SetConsoleColor(ConsoleColor.Cyan))
-                                {
+                                    var doc = documents[sp.Document];
+                                    var line = doc.lines[sp.Start.line - 1].Substring(sp.Start.column - 1);
+                                    if (sp.Start.line == sp.End.line)
+                                    {
+                                        line = line.Substring(0, sp.End.column - sp.Start.column);
+                                    }
+
+                                    Console.ForegroundColor = ConsoleColor.Cyan;
+                                    WriteNewLine(ref start);
                                     Console.Write($"# Code {doc.fileName} line {sp.Start.line}: \"{line}\"");
                                 }
+
+                                Console.ForegroundColor = originalForegroundColor;
+                                WriteNewLine(ref start);
+                                WriteInstruction(t.address, t.instruction, padString);
                             }
 
+                            Console.ForegroundColor = ConsoleColor.Magenta;
                             WriteNewLine(ref start);
-                            WriteInstruction(t.address, t.instruction, padString);
-                        }
-
-                        WriteNewLine(ref start);
-                        using (var _ = SetConsoleColor(ConsoleColor.Magenta))
-                        {
                             Console.Write($"# Method End {method.Namespace}.{method.Name}");
+                        }
+                        finally
+                        {
+                            console.ForegroundColor = originalForegroundColor;
                         }
                     }
                 }
@@ -123,61 +124,30 @@ namespace DevHawk.DumpNef
 
         void WriteInstruction(int address, Instruction instruction, string padString)
         {
-            using (var _ = SetConsoleColor(ConsoleColor.Yellow))
+            var originalForegroundColor = Console.ForegroundColor;
+            try
             {
+                Console.ForegroundColor = ConsoleColor.Yellow;
                 Console.Write($"{address.ToString(padString)}");
-            }
 
-            using (var _ = SetConsoleColor(ConsoleColor.Blue))
-            {
+                Console.ForegroundColor = ConsoleColor.Blue;
                 Console.Write($" {instruction.OpCode}");
-            }
 
-            if (!instruction.Operand.IsEmpty)
-            {
-                Console.Write($" {instruction.GetOperandString()}");
-            }
-
-            var comment = instruction.GetComment(address);
-            if (comment.Length > 0)
-            {
-                using (var _ = SetConsoleColor(ConsoleColor.Green))
+                if (!instruction.Operand.IsEmpty)
                 {
+                    Console.Write($" {instruction.GetOperandString()}");
+                }
+
+                var comment = instruction.GetComment(address);
+                if (comment.Length > 0)
+                {
+                    Console.ForegroundColor = ConsoleColor.Green;
                     Console.Write($" # {comment}");
                 }
             }
-        }
-
-        IDisposable SetConsoleColor(ConsoleColor foregroundColor, ConsoleColor? backgroundColor = null)
-        {
-            if (DisableColors) return Nito.Disposables.NoopDisposable.Instance;
-            return new ConsoleColorManager(foregroundColor, backgroundColor);
-        }
-
-        class ConsoleColorManager : IDisposable
-        {
-            readonly ConsoleColor originalForegroundColor;
-            readonly ConsoleColor? originalBackgroundColor;
-
-            public ConsoleColorManager(ConsoleColor foregroundColor, ConsoleColor? backgroundColor = null)
-            {
-                originalForegroundColor = Console.ForegroundColor;
-                originalBackgroundColor = backgroundColor.HasValue ? Console.BackgroundColor : null;
-
-                Console.ForegroundColor = foregroundColor;
-                if (backgroundColor.HasValue)
-                {
-                    Console.BackgroundColor = backgroundColor.Value;
-                }
-            }
-
-            public void Dispose()
+            finally
             {
                 Console.ForegroundColor = originalForegroundColor;
-                if (originalBackgroundColor.HasValue)
-                {
-                    Console.BackgroundColor = originalBackgroundColor.Value;
-                }
             }
         }
     }
