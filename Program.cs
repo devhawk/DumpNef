@@ -1,6 +1,6 @@
 ﻿using System;
+using System.Collections.Immutable;
 using System.ComponentModel.DataAnnotations;
-using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using McMaster.Extensions.CommandLineUtils;
@@ -36,68 +36,50 @@ namespace DevHawk.DumpNef
                 var debugInfo = (await DebugInfo.LoadAsync(NefFile, null))
                     .Match<DebugInfo?>(di => di, _ => null);
 
+                var documents = debugInfo?.Documents
+                    .Select(path => (fileName: System.IO.Path.GetFileName(path), lines: System.IO.File.ReadAllLines(path)))
+                    .ToImmutableList() ?? ImmutableList<(string, string[])>.Empty;
+                var methodStarts = debugInfo?.Methods.ToImmutableDictionary(m => m.Range.Start) 
+                    ?? ImmutableDictionary<int, DebugInfo.Method>.Empty;
+                var methodEnds = debugInfo?.Methods.ToImmutableDictionary(m => m.Range.End)
+                    ?? ImmutableDictionary<int, DebugInfo.Method>.Empty;
+                var sequencePoints = debugInfo?.Methods.SelectMany(m => m.SequencePoints).ToImmutableDictionary(s => s.Address)
+                    ?? ImmutableDictionary<int, DebugInfo.SequencePoint>.Empty;
+                
                 var instructions = script.EnumerateInstructions().ToList();
                 var padString = script.GetInstructionAddressPadding();
 
                 var start = true;
-                if (debugInfo == null)
+                for (int i = 0; i < instructions.Count; i++)
                 {
-                    for (int i = 0; i < instructions.Count; i++)
+                    if (start) start = false; else Console.WriteLine();
+
+                    if (methodStarts.TryGetValue(instructions[i].address, out var methodStart))
                     {
-                        WriteNewLine(ref start);
-                        WriteInstruction(instructions[i].address, instructions[i].instruction, padString);
+                        using var color = SetConsoleColor(ConsoleColor.Magenta);
+                        Console.WriteLine($"# Method Start {methodStart.Namespace}.{methodStart.Name}");
                     }
-                }
-                else
-                {
-                    var documents = debugInfo.Documents
-                        .Select(path => (fileName: Path.GetFileName(path), lines: File.ReadAllLines(path)))
-                        .ToArray();
 
-                    foreach (var method in debugInfo.Methods.OrderBy(m => m.Range.Start))
+                    if (sequencePoints.TryGetValue(instructions[i].address, out var sp)
+                        && sp.Document < documents.Count)
                     {
-                        var originalForegroundColor = Console.ForegroundColor;
-                        try
+                        var doc = documents[sp.Document];
+                        var line = doc.lines[sp.Start.line - 1].Substring(sp.Start.column - 1);
+                        if (sp.Start.line == sp.End.line)
                         {
-                            Console.ForegroundColor = ConsoleColor.Magenta;
-                            WriteNewLine(ref start);
-                            Console.Write($"# Method Start {method.Namespace}.{method.Name}");
-
-                            var methodInstructions = instructions
-                                .SkipWhile(t => t.address < method.Range.Start)
-                                .TakeWhile(t => t.address <= method.Range.End);
-
-                            var sequencePoints = method.SequencePoints.ToDictionary(sp => sp.Address);
-                            foreach (var t in methodInstructions)
-                            {
-                                if (sequencePoints.TryGetValue(t.address, out var sp)
-                                    && sp.Document < documents.Length)
-                                {
-                                    var doc = documents[sp.Document];
-                                    var line = doc.lines[sp.Start.line - 1].Substring(sp.Start.column - 1);
-                                    if (sp.Start.line == sp.End.line)
-                                    {
-                                        line = line.Substring(0, sp.End.column - sp.Start.column);
-                                    }
-
-                                    Console.ForegroundColor = ConsoleColor.Cyan;
-                                    WriteNewLine(ref start);
-                                    Console.Write($"# Code {doc.fileName} line {sp.Start.line}: \"{line}\"");
-                                }
-
-                                Console.ForegroundColor = originalForegroundColor;
-                                WriteNewLine(ref start);
-                                WriteInstruction(t.address, t.instruction, padString);
-                            }
-
-                            Console.ForegroundColor = ConsoleColor.Magenta;
-                            WriteNewLine(ref start);
-                            Console.Write($"# Method End {method.Namespace}.{method.Name}");
+                            line = line.Substring(0, sp.End.column - sp.Start.column);
                         }
-                        finally
-                        {
-                            console.ForegroundColor = originalForegroundColor;
-                        }
+
+                        using var color = SetConsoleColor(ConsoleColor.Cyan);
+                        Console.WriteLine($"# Code {doc.fileName} line {sp.Start.line}: \"{line}\"");
+                    }
+
+                    WriteInstruction(instructions[i].address, instructions[i].instruction, padString);
+
+                    if (methodEnds.TryGetValue(instructions[i].address, out var methodEnd))
+                    {
+                        using var color = SetConsoleColor(ConsoleColor.Magenta);
+                        Console.Write($"\n# Method End {methodEnd.Namespace}.{methodEnd.Name}");
                     }
                 }
 
@@ -105,13 +87,8 @@ namespace DevHawk.DumpNef
             }
             catch (Exception ex)
             {
-                await console.Error.WriteLineAsync(ex.Message);
+                console.Error.WriteLine(ex.Message);
                 return 1;
-            }
-
-            static void WriteNewLine(ref bool start)
-            {
-                if (start) start = false; else Console.WriteLine();
             }
         }
 
@@ -148,6 +125,39 @@ namespace DevHawk.DumpNef
             finally
             {
                 Console.ForegroundColor = originalForegroundColor;
+            }
+        }
+
+        IDisposable SetConsoleColor(ConsoleColor foregroundColor, ConsoleColor? backgroundColor = null)
+        {
+            if (DisableColors) return Nito.Disposables.NoopDisposable.Instance;
+            return new ConsoleColorManager(foregroundColor, backgroundColor);
+        }
+
+        class ConsoleColorManager : IDisposable
+        {
+            readonly ConsoleColor originalForegroundColor;
+            readonly ConsoleColor? originalBackgroundColor;
+
+            public ConsoleColorManager(ConsoleColor foregroundColor, ConsoleColor? backgroundColor = null)
+            {
+                originalForegroundColor = Console.ForegroundColor;
+                originalBackgroundColor = backgroundColor.HasValue ? Console.BackgroundColor : null;
+
+                Console.ForegroundColor = foregroundColor;
+                if (backgroundColor.HasValue)
+                {
+                    Console.BackgroundColor = backgroundColor.Value;
+                }
+            }
+
+            public void Dispose()
+            {
+                Console.ForegroundColor = originalForegroundColor;
+                if (originalBackgroundColor.HasValue)
+                {
+                    Console.BackgroundColor = originalBackgroundColor.Value;
+                }
             }
         }
     }
