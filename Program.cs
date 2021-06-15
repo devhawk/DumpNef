@@ -1,11 +1,16 @@
 ﻿using System;
 using System.Collections.Immutable;
 using System.ComponentModel.DataAnnotations;
+using System.Diagnostics.CodeAnalysis;
+using System.IO;
 using System.Linq;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using McMaster.Extensions.CommandLineUtils;
 using Neo.BlockchainToolkit;
 using Neo.BlockchainToolkit.Models;
+using Neo.IO;
+using Neo.SmartContract;
 using Neo.VM;
 
 namespace DevHawk.DumpNef
@@ -14,27 +19,23 @@ namespace DevHawk.DumpNef
     {
         private static void Main(string[] args) => CommandLineApplication.Execute<Program>(args);
 
-        [Argument(0)]
+        [Argument(0, "Path to .NEF file or contract hex string")]
         [Required]
-        internal string NefFile { get; init; } = string.Empty;
+        internal string Input { get; init; } = string.Empty;
 
-        [Option]
+        [Option(Description = "Disable colors in Neo VM output")]
         internal bool DisableColors { get; }
 
         internal async Task<int> OnExecuteAsync(CommandLineApplication app, IConsole console)
         {
-            if (!System.IO.File.Exists(NefFile))
-            {
-                await console.Error.WriteLineAsync($"{NefFile} cannot be found");
-                return 1;
-            }
-
             try
             {
-                var nef = LoadNefFile(NefFile);
-                var script = (Neo.VM.Script)nef.Script;
-                var debugInfo = (await DebugInfo.LoadAsync(NefFile, null))
-                    .Match<DebugInfo?>(di => di, _ => null);
+                if (!TryLoadScript(Input, out var script))
+                {
+                    throw new Exception($"{nameof(Input)} must be a path to an .nef file or a hex string");
+                }
+
+                var debugInfo = (await DebugInfo.LoadAsync(Input, null)).Match<DebugInfo?>(di => di, _ => null);
 
                 var documents = debugInfo?.Documents
                     .Select(path => (fileName: System.IO.Path.GetFileName(path), lines: System.IO.File.ReadAllLines(path)))
@@ -92,11 +93,26 @@ namespace DevHawk.DumpNef
             }
         }
 
-        static Neo.SmartContract.NefFile LoadNefFile(string path)
+        static bool TryLoadScript(string input, [NotNullWhen(true)] out Script? script)
         {
-            using var stream = System.IO.File.OpenRead(path);
-            using var reader = new System.IO.BinaryReader(stream, System.Text.Encoding.UTF8, false);
-            return Neo.IO.Helper.ReadSerializable<Neo.SmartContract.NefFile>(reader);
+            if (File.Exists(input))
+            {
+                using var stream = File.OpenRead(input);
+                using var reader = new BinaryReader(stream, System.Text.Encoding.UTF8, false);
+                var nefFile = reader.ReadSerializable<NefFile>();
+                script = nefFile.Script;
+                return true;
+            }
+
+            var regex = new Regex("^([a-fA-F0-9]{2})+$");
+            if (regex.Match(input).Success)
+            {
+                script = Convert.FromHexString(input);
+                return true;
+            }
+
+            script = null;
+            return false;
         }
 
         void WriteInstruction(int address, Instruction instruction, string padString)
