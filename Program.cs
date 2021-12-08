@@ -35,7 +35,8 @@ namespace DevHawk.DumpNef
                     throw new Exception($"{nameof(Input)} must be a path to an .nef file or a hex string");
                 }
 
-                var debugInfo = (await DebugInfo.LoadAsync(Input, null)).Match<DebugInfo?>(di => di, _ => null);
+                var debugInfo = (await DebugInfo.LoadAsync(Input, null).ConfigureAwait(false))
+                    .Match<DebugInfo?>(di => di, _ => null);
 
                 var documents = debugInfo?.Documents
                     .Select(path => (fileName: System.IO.Path.GetFileName(path), lines: System.IO.File.ReadAllLines(path)))
@@ -88,7 +89,7 @@ namespace DevHawk.DumpNef
             }
             catch (Exception ex)
             {
-                console.Error.WriteLine(ex.Message);
+                await console.Error.WriteLineAsync(ex.Message).ConfigureAwait(false);
                 return 1;
             }
         }

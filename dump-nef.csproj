@@ -5,7 +5,7 @@
     <Authors>Harry Pierson</Authors>
     <Company>Harry Pierson</Company>
     <Copyright>2021 Harry Pierson</Copyright>
-    <LangVersion>9</LangVersion>
+    <LangVersion>10</LangVersion>
     <Nullable>enable</Nullable>
     <OutputType>Exe</OutputType>
     <PackageId>DevHawk.DumpNef</PackageId>
@@ -17,17 +17,14 @@
     <RepositoryUrl>https://github.com/devhawk/DumpNef.git</RepositoryUrl>
     <RootNamespace>DevHawk.DumpNef</RootNamespace>
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
-    <TargetFramework>net5.0</TargetFramework>
+    <TargetFramework>net6.0</TargetFramework>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="McMaster.Extensions.CommandLineUtils" Version="3.1.0" />
-    <PackageReference Include="Neo.BlockchainToolkit3" Version="1.0.50-preview" />
+    <PackageReference Include="Neo.BlockchainToolkit.Library" Version="3.1.21" />
     <PackageReference Include="Nito.Disposables" Version="2.2.0" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <PackageReference Include="Microsoft.SourceLink.GitHub" Version="1.0.0" PrivateAssets="All"/>
+    <PackageReference Include="Microsoft.SourceLink.GitHub" Version="1.1.1" PrivateAssets="All"/>
   </ItemGroup>
 
 </Project>
