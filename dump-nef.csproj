@@ -22,9 +22,28 @@
 
   <ItemGroup>
     <PackageReference Include="McMaster.Extensions.CommandLineUtils" Version="3.1.0" />
-    <PackageReference Include="Neo.BlockchainToolkit.Library" Version="3.1.21" />
     <PackageReference Include="Nito.Disposables" Version="2.2.0" />
-    <PackageReference Include="Microsoft.SourceLink.GitHub" Version="1.1.1" PrivateAssets="All"/>
+    <PackageReference Include="Microsoft.SourceLink.GitHub" Version="1.1.1" PrivateAssets="All" />
   </ItemGroup>
+
+  <PropertyGroup>
+    <BlockchainToolkitLibraryVersion>3.1.27</BlockchainToolkitLibraryVersion>
+    <BlockchainToolkitLibraryLocalPath>..\lib-bctk</BlockchainToolkitLibraryLocalPath>
+    <BlockchainToolkitLibraryVersion>local</BlockchainToolkitLibraryVersion>
+  </PropertyGroup>
+
+  <Choose>
+    <When Condition=" '$(BlockchainToolkitLibraryVersion)' == 'local'">
+      <ItemGroup>
+        <ProjectReference Include="$(BlockchainToolkitLibraryLocalPath)\src\bctklib\bctklib.csproj" />
+      </ItemGroup>
+    </When>
+    <Otherwise>
+      <ItemGroup>
+        <PackageReference Include="Neo.BlockchainToolkit.Library" Version="$(BlockchainToolkitLibraryVersion)" />
+      </ItemGroup>
+    </Otherwise>
+  </Choose>
+
 
 </Project>
