@@ -107,6 +107,13 @@ namespace DevHawk.DumpNef
             }
 
             tokens = Array.Empty<MethodToken>();
+
+            Span<byte> span = stackalloc byte[input.Length];
+            if (Convert.TryFromBase64String(input, span, out var bytesWritten)) {
+                script = span.Slice(0, bytesWritten).ToArray();
+                return true;
+            }
+
             var regex = new Regex("^([a-fA-F0-9]{2})+$");
             if (regex.Match(input).Success)
             {
