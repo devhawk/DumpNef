@@ -30,7 +30,7 @@ namespace DevHawk.DumpNef
         {
             try
             {
-                if (!TryLoadScript(Input, out var script))
+                if (!TryLoadScript(Input, out var script, out var tokens))
                 {
                     throw new Exception($"{nameof(Input)} must be a path to an .nef file or a hex string");
                 }
@@ -76,7 +76,7 @@ namespace DevHawk.DumpNef
                         Console.WriteLine($"# Code {doc.fileName} line {sp.Start.line}: \"{line}\"");
                     }
 
-                    WriteInstruction(instructions[i].address, instructions[i].instruction, padString);
+                    WriteInstruction(instructions[i].address, instructions[i].instruction, padString, tokens);
 
                     if (methodEnds.TryGetValue(instructions[i].address, out var methodEnd))
                     {
@@ -94,7 +94,7 @@ namespace DevHawk.DumpNef
             }
         }
 
-        static bool TryLoadScript(string input, [NotNullWhen(true)] out Script? script)
+        static bool TryLoadScript(string input, out Script script, out MethodToken[] tokens)
         {
             if (File.Exists(input))
             {
@@ -102,6 +102,15 @@ namespace DevHawk.DumpNef
                 using var reader = new BinaryReader(stream, System.Text.Encoding.UTF8, false);
                 var nefFile = reader.ReadSerializable<NefFile>();
                 script = nefFile.Script;
+                tokens = nefFile.Tokens;
+                return true;
+            }
+
+            tokens = Array.Empty<MethodToken>();
+
+            Span<byte> span = stackalloc byte[input.Length];
+            if (Convert.TryFromBase64String(input, span, out var bytesWritten)) {
+                script = span.Slice(0, bytesWritten).ToArray();
                 return true;
             }
 
@@ -112,11 +121,11 @@ namespace DevHawk.DumpNef
                 return true;
             }
 
-            script = null;
+            script = Array.Empty<byte>();
             return false;
         }
 
-        void WriteInstruction(int address, Instruction instruction, string padString)
+        void WriteInstruction(int address, Instruction instruction, string padString, MethodToken[] tokens)
         {
             var originalForegroundColor = Console.ForegroundColor;
             try
@@ -132,7 +141,7 @@ namespace DevHawk.DumpNef
                     Console.Write($" {instruction.GetOperandString()}");
                 }
 
-                var comment = instruction.GetComment(address);
+                var comment = instruction.GetComment(address, tokens);
                 if (comment.Length > 0)
                 {
                     Console.ForegroundColor = ConsoleColor.Green;
