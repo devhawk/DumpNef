@@ -1,0 +1,47 @@
+name: Build
+
+on:
+  pull_request:
+    branches:
+      - main
+      - 'release/*'
+  push:
+    branches:
+      - main
+      - 'release/**'
+    paths-ignore:
+      - 'readme.md'
+      - 'docs/**'
+  workflow_call:
+    outputs:
+      version:
+        value:  ${{ jobs.build.outputs.releaseVersion }}
+      preRelease: 
+        value:  ${{ jobs.build.outputs.preRelease }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    outputs:
+      version:    ${{ steps.nbgv.outputs.CloudBuildNumber }}
+      preRelease: ${{ steps.nbgv.outputs.PrereleaseVersion != '' }}
+    steps:
+    - uses: actions/checkout@v2
+      with:
+        fetch-depth: 0
+    - name: Setup .NET Core
+      uses: actions/setup-dotnet@v1
+      with:
+        dotnet-version: '6.0.x'
+    - name: Nerdbank.GitVersioning
+      uses: dotnet/nbgv@v0.4.0
+      id: nbgv
+    - name: Install dependencies
+      run: dotnet restore
+    - name: Pack 
+      run: dotnet pack --output ./out --configuration Release --no-restore --verbosity normal
+    - name: Upload artifact
+      uses: actions/upload-artifact@v2
+      with:
+        name: packages
+        path: ./out
