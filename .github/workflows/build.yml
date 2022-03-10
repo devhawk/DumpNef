@@ -15,7 +15,7 @@ on:
   workflow_call:
     outputs:
       version:
-        value:  ${{ jobs.build.outputs.releaseVersion }}
+        value:  ${{ jobs.build.outputs.version }}
       preRelease: 
         value:  ${{ jobs.build.outputs.preRelease }}
 
