@@ -16,10 +16,9 @@ jobs:
       uses: actions/setup-dotnet@v1
       with:
         dotnet-version: '6.0.x'
-    - name: Install nbgv
-      run: dotnet tool install nbgv --tool-path ./tools
-    - name: Run nbgv
-      run: echo "NUGET_PACKAGE_VERSION=$(./tools/nbgv get-version -v NuGetPackageVersion)" >> $GITHUB_ENV
+    - name: Nerdbank.GitVersioning
+      uses: dotnet/nbgv@v0.4.0
+      id: nbgv
     - name: Install dependencies
       run: dotnet restore
     - name: Pack 
@@ -33,8 +32,8 @@ jobs:
       uses: marvinpinto/action-automatic-releases@v1.1.1
       with:
         repo_token: "${{ secrets.GITHUB_TOKEN }}"
-        prerelease: ${{ contains(env.NUGET_PACKAGE_VERSION, '-preview') }}
-        title: Release ${{ env.NUGET_PACKAGE_VERSION }}
-        automatic_release_tag: ${{ env.NUGET_PACKAGE_VERSION }}
+        prerelease: ${{ steps.nbgv.outputs.PrereleaseVersion != '' }}
+        title: Release ${{ steps.nbgv.outputs.NuGetPackageVersion }}
+        automatic_release_tag: ${{ steps.nbgv.outputs.NuGetPackageVersion }}
         files: |
           ./out/*
