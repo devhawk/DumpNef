@@ -37,3 +37,5 @@ jobs:
         automatic_release_tag: ${{ steps.nbgv.outputs.NuGetPackageVersion }}
         files: |
           ./out/*
+    - name: Push to Nuget.org
+      run: dotnet nuget push ${{ format('./out/DevHawk.DumpNef.{0}.nupkg', steps.nbgv.outputs.NuGetPackageVersion) }} --api-key ${{ secrets.NUGET_ORG_TOKEN }} --source https://api.nuget.org/v3/index.json
