@@ -98,8 +98,8 @@ namespace DevHawk.DumpNef
         {
             if (File.Exists(input))
             {
-                using var stream = File.OpenRead(input);
-                using var reader = new BinaryReader(stream, System.Text.Encoding.UTF8, false);
+                var bytes = File.ReadAllBytes(input);
+                var reader = new MemoryReader(bytes);
                 var nefFile = reader.ReadSerializable<NefFile>();
                 script = nefFile.Script;
                 tokens = nefFile.Tokens;

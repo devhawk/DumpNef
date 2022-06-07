@@ -21,13 +21,13 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="McMaster.Extensions.CommandLineUtils" Version="3.1.0" />
-    <PackageReference Include="Nito.Disposables" Version="2.2.0" />
+    <PackageReference Include="McMaster.Extensions.CommandLineUtils" Version="4.0.1" />
+    <PackageReference Include="Nito.Disposables" Version="2.3.0" />
     <PackageReference Include="Microsoft.SourceLink.GitHub" Version="1.1.1" PrivateAssets="All" />
   </ItemGroup>
 
   <PropertyGroup>
-    <BlockchainToolkitLibraryVersion>3.1.35</BlockchainToolkitLibraryVersion>
+    <BlockchainToolkitLibraryVersion>3.3.10-preview</BlockchainToolkitLibraryVersion>
     <BlockchainToolkitLibraryLocalPath>..\lib-bctk</BlockchainToolkitLibraryLocalPath>
     <!-- <BlockchainToolkitLibraryVersion>local</BlockchainToolkitLibraryVersion> -->
   </PropertyGroup>
