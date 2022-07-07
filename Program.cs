@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Buffers;
 using System.Collections.Immutable;
 using System.ComponentModel.DataAnnotations;
 using System.Diagnostics.CodeAnalysis;
@@ -32,7 +33,7 @@ namespace DevHawk.DumpNef
             {
                 if (!TryLoadScript(Input, out var script, out var tokens))
                 {
-                    throw new Exception($"{nameof(Input)} must be a path to an .nef file or a hex string");
+                    throw new Exception($"{nameof(Input)} must be a path to an .nef file or a Base64 or Hex encoded Neo.VM script");
                 }
 
                 var debugInfo = (await DebugInfo.LoadAsync(Input, null).ConfigureAwait(false))
@@ -108,21 +109,35 @@ namespace DevHawk.DumpNef
 
             tokens = Array.Empty<MethodToken>();
 
-            Span<byte> span = stackalloc byte[input.Length];
-            if (Convert.TryFromBase64String(input, span, out var bytesWritten)) {
-                script = span.Slice(0, bytesWritten).ToArray();
-                return true;
+            var pool = ArrayPool<byte>.Shared;
+            var buffer = input.Length < 256
+                ? null 
+                : pool.Rent(input.Length);
+            try
+            {
+                Span<byte> span = input.Length < 256
+                    ? stackalloc byte[input.Length]
+                    : buffer.AsSpan(0, input.Length);
+                if (Convert.TryFromBase64String(input, span, out var bytesWritten)) {
+                    script = span.Slice(0, bytesWritten).ToArray();
+                    return true;
+                }
+            }
+            finally
+            {
+                if (buffer is not null) pool.Return(buffer);
             }
 
-            var regex = new Regex("^([a-fA-F0-9]{2})+$");
-            if (regex.Match(input).Success)
+            try
             {
                 script = Convert.FromHexString(input);
                 return true;
             }
-
-            script = Array.Empty<byte>();
-            return false;
+            catch (FormatException)
+            {
+                script = Array.Empty<byte>();
+                return false;
+            }
         }
 
         void WriteInstruction(int address, Instruction instruction, string padString, MethodToken[] tokens)
