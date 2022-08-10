@@ -2,16 +2,15 @@
 using System.Buffers;
 using System.Collections.Immutable;
 using System.ComponentModel.DataAnnotations;
-using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Linq;
-using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using McMaster.Extensions.CommandLineUtils;
 using Neo.BlockchainToolkit;
 using Neo.BlockchainToolkit.Models;
 using Neo.IO;
 using Neo.SmartContract;
+using Neo.SmartContract.Native;
 using Neo.VM;
 
 namespace DevHawk.DumpNef
@@ -27,6 +26,9 @@ namespace DevHawk.DumpNef
         [Option(Description = "Disable colors in Neo VM output")]
         internal bool DisableColors { get; }
 
+        [Option]
+        internal bool MethodTokens { get; }
+
         internal async Task<int> OnExecuteAsync(CommandLineApplication app, IConsole console)
         {
             try
@@ -36,19 +38,31 @@ namespace DevHawk.DumpNef
                     throw new Exception($"{nameof(Input)} must be a path to an .nef file or a Base64 or Hex encoded Neo.VM script");
                 }
 
+                if (MethodTokens)
+                {
+                    foreach (var token in tokens.OrderBy(t => t.Hash))
+                    {
+                        var contract = NativeContract.Contracts.SingleOrDefault(d => d.Hash == token.Hash);
+                        var contractName = contract?.Name ?? $"{token.Hash}";
+
+                        console.WriteLine($"{contractName} {token.Method}");
+                    }
+                    return 0;
+                }
+
                 var debugInfo = (await DebugInfo.LoadAsync(Input, null).ConfigureAwait(false))
                     .Match<DebugInfo?>(di => di, _ => null);
 
                 var documents = debugInfo?.Documents
                     .Select(path => (fileName: System.IO.Path.GetFileName(path), lines: System.IO.File.ReadAllLines(path)))
                     .ToImmutableList() ?? ImmutableList<(string, string[])>.Empty;
-                var methodStarts = debugInfo?.Methods.ToImmutableDictionary(m => m.Range.Start) 
+                var methodStarts = debugInfo?.Methods.ToImmutableDictionary(m => m.Range.Start)
                     ?? ImmutableDictionary<int, DebugInfo.Method>.Empty;
                 var methodEnds = debugInfo?.Methods.ToImmutableDictionary(m => m.Range.End)
                     ?? ImmutableDictionary<int, DebugInfo.Method>.Empty;
                 var sequencePoints = debugInfo?.Methods.SelectMany(m => m.SequencePoints).ToImmutableDictionary(s => s.Address)
                     ?? ImmutableDictionary<int, DebugInfo.SequencePoint>.Empty;
-                
+
                 var instructions = script.EnumerateInstructions().ToList();
                 var padString = script.GetInstructionAddressPadding();
 
@@ -111,14 +125,15 @@ namespace DevHawk.DumpNef
 
             var pool = ArrayPool<byte>.Shared;
             var buffer = input.Length < 256
-                ? null 
+                ? null
                 : pool.Rent(input.Length);
             try
             {
                 Span<byte> span = input.Length < 256
                     ? stackalloc byte[input.Length]
                     : buffer.AsSpan(0, input.Length);
-                if (Convert.TryFromBase64String(input, span, out var bytesWritten)) {
+                if (Convert.TryFromBase64String(input, span, out var bytesWritten))
+                {
                     script = span.Slice(0, bytesWritten).ToArray();
                     return true;
                 }
