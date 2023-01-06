@@ -53,15 +53,25 @@ namespace DevHawk.DumpNef
                 var debugInfo = (await DebugInfo.LoadContractDebugInfoAsync(Input, null).ConfigureAwait(false))
                     .Match<DebugInfo?>(di => di, _ => null);
 
-                var documents = debugInfo?.Documents
-                    .Select(path => (fileName: System.IO.Path.GetFileName(path), lines: System.IO.File.ReadAllLines(path)))
-                    .ToImmutableList() ?? ImmutableList<(string, string[])>.Empty;
+                var documents = debugInfo is not null
+                    ? debugInfo.Documents.Select(path => SelectDocument(debugInfo, path)).ToImmutableList()
+                    : ImmutableList<(string, string[])>.Empty;
                 var methodStarts = debugInfo?.Methods.ToImmutableDictionary(m => m.Range.Start)
                     ?? ImmutableDictionary<int, DebugInfo.Method>.Empty;
                 var methodEnds = debugInfo?.Methods.ToImmutableDictionary(m => m.Range.End)
                     ?? ImmutableDictionary<int, DebugInfo.Method>.Empty;
                 var sequencePoints = debugInfo?.Methods.SelectMany(m => m.SequencePoints).ToImmutableDictionary(s => s.Address)
                     ?? ImmutableDictionary<int, DebugInfo.SequencePoint>.Empty;
+
+                static (string filename, string[] lines) SelectDocument(DebugInfo debugInfo, string path)
+                {
+                    if (!string.IsNullOrEmpty(debugInfo.DocumentRoot))
+                    {
+                        path = Path.Combine(debugInfo.DocumentRoot, path);
+                    }
+
+                    return (Path.GetFileName(path), File.ReadAllLines(path));
+                }
 
                 var instructions = script.EnumerateInstructions().ToList();
                 var padString = script.GetInstructionAddressPadding();
