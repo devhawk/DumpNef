@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Buffers;
+using System.Buffers.Binary;
 using System.Collections.Immutable;
 using System.ComponentModel.DataAnnotations;
 using System.IO;
@@ -40,14 +41,42 @@ namespace DevHawk.DumpNef
 
                 if (MethodTokens)
                 {
-                    foreach (var token in tokens.OrderBy(t => t.Hash))
+                    if (tokens.Length == 0)
                     {
-                        var contract = NativeContract.Contracts.SingleOrDefault(d => d.Hash == token.Hash);
-                        var contractName = contract?.Name ?? $"{token.Hash}";
+                        console.WriteLine("No Method Tokens in contract");
+                    }
+                    else
+                    {
+                        for (ushort i = 0; i < tokens.Length; i++)
+                        {
+                            var token = tokens[i];
+                            var contract = NativeContract.Contracts.SingleOrDefault(d => d.Hash == token.Hash);
+                            var contractName = contract?.Name ?? $"{token.Hash}";
 
-                        console.WriteLine($"{contractName} {token.Method}");
+                            console.WriteLine($"{AsByteString(i)}: {contractName} {token.Method}");
+                        }
                     }
                     return 0;
+
+                    // convert index to hex-string similar to Instruction.GetOperandString does
+                    static string AsByteString(ushort index)
+                    {
+                        Span<byte> indexSpan = stackalloc byte[sizeof(ushort)];
+                        BinaryPrimitives.WriteUInt16LittleEndian(indexSpan, index);
+
+                        var builder = new System.Text.StringBuilder(indexSpan.Length * 3 - 1);
+                        var first = true;
+                        for (var i = 0; i < indexSpan.Length; i++)
+                        {
+                            if (first) { first = false; } else { builder.Append('-'); }
+                            var value = indexSpan[i];
+                            builder.Append(GetHexValue(value / 16));
+                            builder.Append(GetHexValue(value % 16));
+                        }
+                        return builder.ToString();
+
+                        static char GetHexValue(int i) => (i < 10) ? (char)(i + '0') : (char)(i - 10 + 'A');
+                    }
                 }
 
                 var debugInfo = (await DebugInfo.LoadContractDebugInfoAsync(Input, null).ConfigureAwait(false))
