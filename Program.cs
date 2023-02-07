@@ -1,8 +1,9 @@
 ﻿using System;
 using System.Buffers;
 using System.Buffers.Binary;
-using System.Collections.Immutable;
+using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
+using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
@@ -10,7 +11,9 @@ using McMaster.Extensions.CommandLineUtils;
 using Neo.BlockchainToolkit;
 using Neo.BlockchainToolkit.Models;
 using Neo.IO;
+using Neo.Json;
 using Neo.SmartContract;
+using Neo.SmartContract.Manifest;
 using Neo.SmartContract.Native;
 using Neo.VM;
 
@@ -82,15 +85,26 @@ namespace DevHawk.DumpNef
                 var debugInfo = (await DebugInfo.LoadContractDebugInfoAsync(Input, null).ConfigureAwait(false))
                     .Match<DebugInfo?>(di => di, _ => null);
 
-                var documents = debugInfo is not null
-                    ? debugInfo.Documents.Select(path => SelectDocument(debugInfo, path)).ToImmutableList()
-                    : ImmutableList<(string, string[])>.Empty;
-                var methodStarts = debugInfo?.Methods.ToImmutableDictionary(m => m.Range.Start)
-                    ?? ImmutableDictionary<int, DebugInfo.Method>.Empty;
-                var methodEnds = debugInfo?.Methods.ToImmutableDictionary(m => m.Range.End)
-                    ?? ImmutableDictionary<int, DebugInfo.Method>.Empty;
-                var sequencePoints = debugInfo?.Methods.SelectMany(m => m.SequencePoints).ToImmutableDictionary(s => s.Address)
-                    ?? ImmutableDictionary<int, DebugInfo.SequencePoint>.Empty;
+                IReadOnlyList<(string, string[])> documents;
+                IReadOnlyDictionary<int, string> methodStarts, methodEnds;
+                IReadOnlyDictionary<int, DebugInfo.SequencePoint> sequencePoints;
+                if (debugInfo is null)
+                {
+                    documents = Enumerable.Empty<(string, string[])>().ToList();
+                    methodStarts = TryLoadManifest(Input, out var manifest)
+                        ? manifest.Abi.Methods.ToDictionary(m => m.Offset, m => m.Name)
+                        : new Dictionary<int, string>();
+                    methodEnds = new Dictionary<int, string>();
+                    sequencePoints = new Dictionary<int, DebugInfo.SequencePoint>();
+                }
+                else
+                {
+                    documents = debugInfo.Documents.Select(p => SelectDocument(debugInfo, p)).ToList();
+                    methodStarts = debugInfo.Methods.ToDictionary(m => m.Range.Start, m => $"{m.Namespace}.{m.Name}");
+                    methodEnds = debugInfo.Methods.ToDictionary(m => m.Range.End, m => $"{m.Namespace}.{m.Name}");
+                    sequencePoints = debugInfo.Methods.SelectMany(m => m.SequencePoints)
+                        .ToDictionary(s => s.Address);
+                }
 
                 static (string filename, string[] lines) SelectDocument(DebugInfo debugInfo, string path)
                 {
@@ -113,7 +127,7 @@ namespace DevHawk.DumpNef
                     if (methodStarts.TryGetValue(instructions[i].address, out var methodStart))
                     {
                         using var color = SetConsoleColor(ConsoleColor.Magenta);
-                        Console.WriteLine($"# Method Start {methodStart.Namespace}.{methodStart.Name}");
+                        Console.WriteLine($"# Method Start {methodStart}");
                     }
 
                     if (sequencePoints.TryGetValue(instructions[i].address, out var sp)
@@ -135,7 +149,7 @@ namespace DevHawk.DumpNef
                     if (methodEnds.TryGetValue(instructions[i].address, out var methodEnd))
                     {
                         using var color = SetConsoleColor(ConsoleColor.Magenta);
-                        Console.Write($"\n# Method End {methodEnd.Namespace}.{methodEnd.Name}");
+                        Console.Write($"\n# Method End {methodEnd}");
                     }
                 }
 
@@ -146,6 +160,26 @@ namespace DevHawk.DumpNef
                 await console.Error.WriteLineAsync(ex.Message).ConfigureAwait(false);
                 return 1;
             }
+        }
+
+        static bool TryLoadManifest(string input, [MaybeNullWhen(false)] out ContractManifest manifest)
+        {
+            var path = Path.ChangeExtension(input, ".manifest.json");
+
+            try
+            {
+                if (File.Exists(path))
+                {
+                    var text = File.ReadAllText(path);
+                    var json = JToken.Parse(text) as JObject;
+                    manifest = ContractManifest.FromJson(json);
+                    return true;
+                }
+            }
+            catch { }
+
+            manifest = default;
+            return false;
         }
 
         static bool TryLoadScript(string input, out Script script, out MethodToken[] tokens)
