@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Buffers;
 using System.Buffers.Binary;
 using System.Collections.Generic;
@@ -6,6 +6,7 @@ using System.ComponentModel.DataAnnotations;
 using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Linq;
+using System.Text;
 using System.Threading.Tasks;
 using McMaster.Extensions.CommandLineUtils;
 using Neo.BlockchainToolkit;
@@ -137,14 +138,10 @@ namespace DevHawk.DumpNef
                         && sp.Document < documents.Count)
                     {
                         var (fileName, lines) = documents[sp.Document];
-                        var line = lines[sp.Start.Line - 1][(sp.Start.Column - 1)..];
-                        if (sp.Start.Line == sp.End.Line)
-                        {
-                            line = line[..(sp.End.Column - sp.Start.Column)];
-                        }
+                        var code = GetCode(lines, sp);
 
                         using var color = SetConsoleColor(ConsoleColor.Cyan);
-                        Console.WriteLine($"# Code {fileName} line {sp.Start.Line}: \"{line}\"");
+                        Console.WriteLine($"# Code {fileName} line {sp.Start.Line}: \"{code}\"");
                     }
 
                     WriteInstruction(instructions[i].address, instructions[i].instruction, padString, tokens);
@@ -163,6 +160,31 @@ namespace DevHawk.DumpNef
                 await console.Error.WriteLineAsync(ex.Message).ConfigureAwait(false);
                 return 1;
             }
+        }
+
+        static string GetCode(string[] lines, DebugInfo.SequencePoint sp)
+        {
+            if (sp.Start.Line == sp.End.Line) {
+                var line = lines[sp.Start.Line - 1][(sp.Start.Column - 1)..];
+                return line[..(sp.End.Column - sp.Start.Column)];
+            }
+
+            var builder = new StringBuilder();
+            for (int i = sp.Start.Line; i <= sp.End.Line; i++)
+            {
+                var line = lines[i - 1];
+                if (i == sp.Start.Line) 
+                {
+                    line = line[(sp.Start.Column - 1)..];
+                }
+                if (i == sp.End.Line) 
+                {
+                    line = line[..(sp.End.Column - 1)];
+                }
+                builder.Append(line.Trim());
+            }
+
+            return builder.ToString();
         }
 
         static bool TryLoadManifest(string input, [MaybeNullWhen(false)] out ContractManifest manifest)
