@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Buffers;
 using System.Buffers.Binary;
 using System.Collections.Generic;
@@ -57,6 +57,9 @@ namespace DevHawk.DumpNef
                             var contractName = contract?.Name ?? $"{token.Hash}";
 
                             console.WriteLine($"{AsByteString(i)}: {contractName} {token.Method}");
+                            console.WriteLine($"\t{token.ParametersCount} parameter{(token.ParametersCount == 1 ? "" : "s")}");
+                            console.WriteLine($"\t{(token.HasReturnValue ? "has" : "does not have")} return value");
+                            console.WriteLine($"\t{token.CallFlags} call flags");
                         }
                     }
                     return 0;
